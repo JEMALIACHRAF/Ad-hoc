@@ -134,59 +134,73 @@ app.layout = html.Div(
             ],
             style={"margin-top": "20px"},
         ),
-        # Ad-hoc Analysis
-        html.Div(
-            [
-                html.H2("Ad-hoc Analysis", style={"text-align": "center"}),
-                dcc.Dropdown(
-                    id="adhoc-analysis-type",
-                    options=[
-                        {"label": "Revenue Leakage", "value": "revenue_leakage"},
-                        {"label": "Cohort Analysis", "value": "cohort_analysis"},
-                        {"label": "Stacked Bar Chart", "value": "stacked_bar"},
-                    ],
-                    placeholder="Select Analysis Type",
-                ),
-                dcc.Textarea(
-                    id="adhoc-parameters",
-                    placeholder='Additional Parameters (JSON): e.g., {"segment": "SeniorCitizen"}',
-                    style={"width": "100%", "height": "100px"},
-                ),
-                html.Button("Run Analysis", id="run-adhoc-analysis", style={"margin-top": "10px"}),
-                dcc.Graph(id="adhoc-analysis-visualization"),
-            ],
-            style={"margin-top": "20px", "padding": "10px", "border": "1px solid #CCC", "border-radius": "10px"},
-        ),
-        dcc.Interval(id="interval-component", interval=60000, n_intervals=0),
     ]
 )
 
+# Dashboard update callback
 @app.callback(
     [
         Output("customer-segments-visualization", "figure"),
         Output("contract-visualization", "figure"),
         Output("tenure-visualization", "figure"),
         Output("payment-method-visualization", "figure"),
-        Output("prediction-visualization", "figure"),
-        Output("revenue-leakage-visualization", "figure"),
-        Output("churn-heatmap-visualization", "figure"),
-        Output("stacked-bar-visualization", "figure"),
-        Output("cohort-analysis-visualization", "figure"),
-        Output("adhoc-analysis-visualization", "figure"),
+        Output("prediction-visualization", "figure"),  # Keep this output for prediction chart
         Output("total-customers", "children"),
         Output("average-monthly-charges", "children"),
         Output("churn-rate", "children"),
     ],
-    [Input("upload-prediction-file", "contents"), Input("run-adhoc-analysis", "n_clicks")],
-    [State("upload-prediction-file", "filename"), State("adhoc-analysis-type", "value"), State("adhoc-parameters", "value")],
+    [Input("upload-prediction-file", "contents")],
+    [State("upload-prediction-file", "filename")],
 )
-def update_dashboard(uploaded_file_content, n_clicks, uploaded_file_name, adhoc_analysis_type, adhoc_parameters):
+def update_dashboard(uploaded_file_content, uploaded_file_name):
     # Initialize figures and KPI defaults
     total_customers, avg_charges, churn_rate = "N/A", "N/A", "N/A"
     segments_fig, contract_fig, tenure_fig, payment_methods_fig, prediction_fig = px.bar(), px.pie(), px.line(), px.bar(), px.pie()
-    revenue_leakage_fig, churn_heatmap_fig, stacked_bar_fig, cohort_fig, adhoc_fig = px.pie(), px.density_heatmap(), px.bar(), px.line(), px.bar()
 
-    # Fetching Customer Segment Data
+    # Debugging: Check if file is uploaded
+    if uploaded_file_content:
+        try:
+            # Decoding the uploaded file
+            content_type, content_string = uploaded_file_content.split(",")
+            decoded = base64.b64decode(content_string)
+
+            # Save the uploaded file to a temporary location to pass to the backend
+            file_path = "temp_file.csv"
+            with open(file_path, "wb") as f:
+                f.write(decoded)
+
+            # Call the backend API for prediction
+            prediction_response = requests.post(
+                f"{BASE_URL}/ml/predict/file/",
+                files={"file": open(file_path, "rb")},
+            )
+
+            if prediction_response.status_code == 200:
+                # Successfully got the prediction response
+                prediction_data = prediction_response.json()
+                prediction_df = pd.DataFrame(prediction_data)
+
+                # Create a pie chart for prediction results
+                prediction_summary = prediction_df["RiskLevel"].value_counts().reset_index()
+                prediction_summary.columns = ["RiskLevel", "Count"]
+                prediction_fig = px.pie(
+                    prediction_summary,
+                    names="RiskLevel",
+                    values="Count",
+                    title="Churn Risk Level Distribution",
+                    color="RiskLevel",
+                    color_discrete_map={"High": "red", "Medium": "yellow", "Low": "green"},
+                )
+            else:
+                # Handle error in prediction response
+                prediction_fig = px.pie()
+                print("Prediction failed: ", prediction_response.text)
+
+        except Exception as e:
+            print(f"Error uploading file or predicting: {e}")
+            prediction_fig = px.pie()  # Empty pie chart on error
+
+    # Fetching Customer Segment Data (Unchanged)
     try:
         segments_response = requests.get(f"{BASE_URL}/scores/aggregated/")
         if segments_response.status_code == 200:
@@ -206,9 +220,9 @@ def update_dashboard(uploaded_file_content, n_clicks, uploaded_file_name, adhoc_
     except:
         pass
 
-    # Fetching Contract Distribution Data
+    # Fetching Contract Distribution Data (Unchanged)
     try:
-        contracts_response = requests.get(f"{BASE_URL}/netflix/telco/summary/")
+        contracts_response = requests.get(f"{BASE_URL}/Telco/telco/summary/")
         if contracts_response.status_code == 200:
             contracts_data = contracts_response.json()
             contract_types = pd.DataFrame(contracts_data.get("contract_types", []))
@@ -224,9 +238,9 @@ def update_dashboard(uploaded_file_content, n_clicks, uploaded_file_name, adhoc_
     except:
         pass
 
-    # Fetching Tenure Distribution Data
+    # Fetching Tenure Distribution Data (Unchanged)
     try:
-        tenure_response = requests.get(f"{BASE_URL}/netflix/telco/tenure-distribution/")
+        tenure_response = requests.get(f"{BASE_URL}/Telco/telco/tenure-distribution/")
         if tenure_response.status_code == 200:
             tenure_data = tenure_response.json()
             tenure_df = pd.DataFrame(tenure_data)
@@ -243,9 +257,9 @@ def update_dashboard(uploaded_file_content, n_clicks, uploaded_file_name, adhoc_
     except:
         pass
 
-    # Fetching Payment Methods Data
+    # Fetching Payment Methods Data (Unchanged)
     try:
-        payment_response = requests.get(f"{BASE_URL}/netflix/telco/payment-methods/")
+        payment_response = requests.get(f"{BASE_URL}/Telco/telco/payment-methods/")
         if payment_response.status_code == 200:
             payment_methods_data = payment_response.json()
             payment_methods_df = pd.DataFrame(payment_methods_data)
@@ -261,151 +275,16 @@ def update_dashboard(uploaded_file_content, n_clicks, uploaded_file_name, adhoc_
     except:
         pass
 
-    # File Upload for Predictions
-    if uploaded_file_content:
-        try:
-            content_type, content_string = uploaded_file_content.split(",")
-            decoded = base64.b64decode(content_string)
-            prediction_response = requests.post(
-                f"{BASE_URL}/ml/predict/file/",
-                files={"file": io.BytesIO(decoded)},
-            )
-            if prediction_response.status_code == 200:
-                prediction_data = prediction_response.json()
-                prediction_df = pd.DataFrame(prediction_data)
-                prediction_summary = prediction_df["ChurnPrediction"].value_counts().reset_index()
-                prediction_summary.columns = ["ChurnPrediction", "Count"]
-                prediction_summary["Label"] = prediction_summary["ChurnPrediction"].replace({0: "No Churn", 1: "Churn"})
-                prediction_fig = px.pie(
-                    prediction_summary,
-                    names="Label",
-                    values="Count",
-                    title="Churn Prediction Summary",
-                    color="Label",
-                    color_discrete_map={"No Churn": "blue", "Churn": "red"},
-                )
-        except:
-            pass
-
-    # Revenue Leakage Analysis
-    try:
-        revenue_leakage_response = requests.post(
-            f"{BASE_URL}/adhoc/",
-            params={"analysis_type": "revenue_leakage"},
-            json={"segment": "SeniorCitizen", "include_churned": True},
-        )
-        if revenue_leakage_response.status_code == 200:
-            revenue_leakage_data = revenue_leakage_response.json()
-            revenue_leakage_df = pd.DataFrame(revenue_leakage_data)
-            revenue_leakage_fig = px.pie(
-                revenue_leakage_df,
-                names="segment",
-                values="revenue_lost",
-                title="Revenue Leakage by Segment",
-                color_discrete_sequence=px.colors.sequential.RdBu,
-            )
-    except:
-        pass
-
-    # Churn Heatmap Analysis
-    try:
-        heatmap_response = requests.post(
-            f"{BASE_URL}/adhoc/",
-            params={"analysis_type": "churn_heatmap"},
-            json={},
-        )
-        if heatmap_response.status_code == 200:
-            heatmap_data = heatmap_response.json()
-            heatmap_df = pd.DataFrame(heatmap_data)
-            churn_heatmap_fig = px.density_heatmap(
-                heatmap_df,
-                x="InternetService",
-                y="MonthlyCharges",
-                z="churn_likelihood",
-                title="Churn Heatmap: Internet Service vs Monthly Charges",
-                color_continuous_scale="Viridis",
-            )
-    except:
-        pass
-
-    # Stacked Bar Chart
-    try:
-        stacked_response = requests.post(
-            f"{BASE_URL}/adhoc/",
-            params={"analysis_type": "stacked_bar"},
-            json={"fields": ["Contract", "Churn"], "metrics": ["TotalCharges"]},
-        )
-        if stacked_response.status_code == 200:
-            stacked_data = stacked_response.json()
-            stacked_df = pd.DataFrame(stacked_data)
-            stacked_bar_fig = px.bar(
-                stacked_df,
-                x="segment",
-                y=["total_revenue"],
-                color="churn_status",
-                title="Churned vs Non-Churned Revenue",
-                barmode="stack",
-            )
-    except:
-        pass
-
-    # Cohort Analysis
-    try:
-        cohort_response = requests.post(
-            f"{BASE_URL}/adhoc/",
-            params={"analysis_type": "cohort_analysis"},
-            json={"cohort_field": "tenure", "target_field": "Churn"},
-        )
-        if cohort_response.status_code == 200:
-            cohort_data = cohort_response.json()
-            cohort_df = pd.DataFrame(cohort_data)
-            cohort_fig = px.line(
-                cohort_df,
-                x="tenure_range",
-                y="churned_customers",
-                title="Cohort Analysis: Churned Customers by Tenure Range",
-                markers=True,
-            )
-    except:
-        pass
-
-    # Ad-hoc Analysis
-    try:
-        if adhoc_analysis_type:
-            parameters = eval(adhoc_parameters) if adhoc_parameters else {}
-            adhoc_response = requests.post(
-                f"{BASE_URL}/adhoc/",
-                params={"analysis_type": adhoc_analysis_type},
-                json=parameters,
-            )
-            if adhoc_response.status_code == 200:
-                adhoc_data = adhoc_response.json()
-                adhoc_df = pd.DataFrame(adhoc_data)
-                adhoc_fig = px.bar(
-                    adhoc_df,
-                    x=list(adhoc_df.columns)[0],
-                    y=list(adhoc_df.columns)[1],
-                    title=f"Ad-hoc Analysis: {adhoc_analysis_type.title()}",
-                )
-    except:
-        pass
-
     return (
         segments_fig,
         contract_fig,
         tenure_fig,
         payment_methods_fig,
-        prediction_fig,
-        revenue_leakage_fig,
-        churn_heatmap_fig,
-        stacked_bar_fig,
-        cohort_fig,
-        adhoc_fig,
+        prediction_fig,  # Keep prediction visualization here
         total_customers,
         avg_charges,
         churn_rate,
     )
-
 
 if __name__ == "__main__":
     app.run_server(debug=True)

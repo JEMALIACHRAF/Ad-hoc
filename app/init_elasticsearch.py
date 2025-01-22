@@ -1,6 +1,39 @@
 import pandas as pd
 from app.services.elasticsearch_service import create_index, index_data
 
+# Define index name
+index_name = 'telco_customer_churn_index'
+
+# Define Elasticsearch mappings
+mappings = {
+    "mappings": {
+        "properties": {
+            "customerID": {"type": "keyword"},
+            "gender": {"type": "keyword"},
+            "SeniorCitizen": {"type": "integer"},
+            "Partner": {"type": "keyword"},
+            "Dependents": {"type": "keyword"},
+            "tenure": {"type": "integer"},
+            "PhoneService": {"type": "keyword"},
+            "MultipleLines": {"type": "keyword"},
+            "InternetService": {"type": "keyword"},
+            "OnlineSecurity": {"type": "keyword"},
+            "OnlineBackup": {"type": "keyword"},
+            "DeviceProtection": {"type": "keyword"},
+            "TechSupport": {"type": "keyword"},
+            "StreamingTV": {"type": "keyword"},
+            "StreamingMovies": {"type": "keyword"},
+            "Contract": {"type": "keyword"},
+            "PaperlessBilling": {"type": "keyword"},
+            "PaymentMethod": {"type": "keyword"},
+            "MonthlyCharges": {"type": "float"},
+            "TotalCharges": {"type": "float"},
+            "Churn": {"type": "boolean"}
+        }
+    }
+}
+
+# Function to load, preprocess, and index Telco data
 def load_and_index_telco_data():
     # File path to the Telco dataset
     file_path = 'C:/Users/jemal/Downloads/archive1/WA_Fn-UseC_-Telco-Customer-Churn.csv'
@@ -12,47 +45,33 @@ def load_and_index_telco_data():
     # Encode Churn column as boolean
     df['Churn'] = df['Churn'].apply(lambda x: True if x == "Yes" else False)
 
-    # Define Elasticsearch mapping
-    telco_mapping = {
-        "mappings": {
-            "properties": {
-                "customerID": {"type": "keyword"},
-                "gender": {"type": "keyword"},
-                "SeniorCitizen": {"type": "integer"},
-                "Partner": {"type": "keyword"},
-                "Dependents": {"type": "keyword"},
-                "tenure": {"type": "integer"},
-                "PhoneService": {"type": "keyword"},
-                "MultipleLines": {"type": "keyword"},
-                "InternetService": {"type": "keyword"},
-                "OnlineSecurity": {"type": "keyword"},
-                "OnlineBackup": {"type": "keyword"},
-                "DeviceProtection": {"type": "keyword"},
-                "TechSupport": {"type": "keyword"},
-                "StreamingTV": {"type": "keyword"},
-                "StreamingMovies": {"type": "keyword"},
-                "Contract": {"type": "keyword"},
-                "PaperlessBilling": {"type": "keyword"},
-                "PaymentMethod": {"type": "keyword"},
-                "MonthlyCharges": {"type": "float"},
-                "TotalCharges": {"type": "float"},
-                "Churn": {"type": "boolean"}
-            }
-        }
-    }
+    # Create Elasticsearch index with mappings
+    create_index(index_name, mappings)
 
-    # Create Elasticsearch index
-    create_index("telco_customer_churn_index", telco_mapping)
+    # Convert the DataFrame to a list of dictionaries
+    records = df.to_dict(orient='records')
 
-    # Index each row as a document
-    for _, row in df.iterrows():
-        doc = row.to_dict()
+    # Prepare actions for indexing
+    for record in records:
+        # Adjust document fields for exact matching (use .keyword for specified fields)
+        adjusted_record = {}
+        for key, value in record.items():
+            # Apply .keyword for fields that are of keyword type
+            if key in ['gender', 'Partner', 'Dependents', 'PhoneService', 'MultipleLines', 'InternetService', 'Contract', 'PaymentMethod', 'StreamingTV', 'StreamingMovies', 'DeviceProtection', 'TechSupport', 'OnlineSecurity', 'OnlineBackup', 'PaperlessBilling']:
+                # Ensure that fields like 'gender' are treated as strings, not objects
+                if isinstance(value, str):
+                    adjusted_record[key] = value
+                else:
+                    adjusted_record[key] = value
+            else:
+                adjusted_record[key] = value
+
         try:
-            index_data("telco_customer_churn_index", doc)
+            # Index the document using the index_data function
+            index_data(index_name, adjusted_record)
         except Exception as e:
-            print(f"Error indexing document {doc.get('customerID', 'Unknown ID')}: {e}")
+            print(f"Error indexing document with customerID {record.get('customerID', 'Unknown ID')}: {e}")
 
+# Run the function to load and index data
 if __name__ == "__main__":
     load_and_index_telco_data()
-
-

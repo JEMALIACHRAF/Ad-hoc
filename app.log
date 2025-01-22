@@ -1,0 +1,2 @@
+2025-01-20 13:32:48,335 - elastic_transport.transport - INFO - POST http://localhost:9200/telco_customer_churn_index/_search [status:400 duration:0.070s]
+2025-01-20 13:34:47,416 - elastic_transport.transport - INFO - POST http://localhost:9200/telco_customer_churn_index/_search [status:400 duration:0.030s]

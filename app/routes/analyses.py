@@ -1,185 +1,199 @@
-from fastapi import APIRouter, HTTPException
+import nest_asyncio
+import asyncio
+import aiohttp
+import json
+import logging
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional, Dict
+from app.services.elasticsearch_service import search_data  # Adjust import as per your project structure
+import logging
+from fastapi import APIRouter, HTTPException, Query, Body
+from typing import Optional, Dict, Any
 from app.services.elasticsearch_service import search_data
+# Apply nest_asyncio to allow asyncio in Jupyter notebooks (if needed)
+nest_asyncio.apply()
+
+# OpenAI API configuration
+OPENAI_API_KEY = "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"
+model_name = "gpt-4o-2024-05-13"  # Adjust the model name as per your OpenAI account
 
 router = APIRouter()
 
-@router.post("/adhoc/")
-async def perform_adhoc_analysis(analysis_type: str, parameters: dict):
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
+
+import re
+
+async def generate_async(model, analysis_type, parameters):
     """
-    Perform ad-hoc analysis based on the provided type and parameters.
+    Generates an Elasticsearch query using OpenAI's API based on analysis type and parameters.
+    """
+    prompt = f"""
+    Generate a valid Elasticsearch query for {analysis_type} analysis based on the following parameters: {parameters}.
+    The query must:
+    1. Use the following field mappings for the Elasticsearch index:
+    - `customerID`: keyword
+    - `gender`: keyword
+    - `SeniorCitizen`: integer
+    - `Partner`: keyword
+    - `Dependents`: keyword
+    - `tenure`: integer
+    - `PhoneService`: keyword
+    - `MultipleLines`: keyword
+    - `InternetService`: keyword
+    - `OnlineSecurity`: keyword
+    - `OnlineBackup`: keyword
+    - `DeviceProtection`: keyword
+    - `TechSupport`: keyword
+    - `StreamingTV`: keyword
+    - `StreamingMovies`: keyword
+    - `Contract`: keyword
+    - `PaperlessBilling`: keyword
+    - `PaymentMethod`: keyword
+    - `MonthlyCharges`: float
+    - `TotalCharges`: float
+    - `Churn`: boolean
+    2. Include filters or aggregations as specified in the parameters.
+    3. Be well-formed JSON that is directly executable in Elasticsearch.
+    4. Do not include any explanations, only the JSON query wrapped in ```json``` code block.
+    """
+
+    logger.info(f"Sending prompt to GPT for {analysis_type} analysis with parameters: {parameters}")
     
-    Parameters:
-    - analysis_type: Type of analysis to perform (e.g., "retention", "engagement", "revenue_leakage").
-    - parameters: Additional filters or options for the analysis.
-    """
-    if analysis_type == "retention":
-        return await retention_analysis(parameters)
-    elif analysis_type == "engagement":
-        return await engagement_analysis(parameters)
-    elif analysis_type == "revenue_leakage":
-        return await revenue_leakage_analysis(parameters)
-    elif analysis_type == "churn_heatmap":
-        return await churn_heatmap_analysis(parameters)
-    elif analysis_type == "stacked_bar":
-        return await stacked_bar_analysis(parameters)
-    elif analysis_type == "cohort_analysis":
-        return await cohort_analysis(parameters)
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown analysis type: {analysis_type}")
-
-
-async def retention_analysis(parameters: dict):
-    """
-    Retention analysis: Analyze churned customers grouped by contract type.
-    """
-    query = {
-        "query": {"match_all": {}},
-        "aggs": {
-            "contract_retention": {
-                "terms": {"field": "Contract"},
-                "aggs": {
-                    "churned_customers": {"filter": {"term": {"Churn": True}}}
-                }
-            }
-        }
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_API_KEY}"
+    }
+    data = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}]
     }
 
-    if "contract" in parameters:
-        query["query"] = {"term": {"Contract": parameters["contract"]}}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=data, headers=headers) as response:
+                raw_response = await response.text()
+                logger.debug(f"Raw response from OpenAI API: {raw_response}")
 
-    response = search_data("telco_customer_churn_index", query)
-    buckets = response.get("aggregations", {}).get("contract_retention", {}).get("buckets", [])
-    return [{"contract": b["key"], "churned_customers": b["churned_customers"]["doc_count"]} for b in buckets]
+                if response.status == 200:
+                    result = json.loads(raw_response)
+                    if result.get('choices') and result['choices'][0].get('message'):
+                        response_content = result['choices'][0]['message']['content']
+                        
+                        # Extract the JSON block using regex
+                        match = re.search(r"```json(.*?)```", response_content, re.DOTALL)
+                        if match:
+                            json_query = match.group(1).strip()
+                            query_json = json.loads(json_query)  # Parse the JSON
+                            logger.info(f"Generated valid Elasticsearch query: {query_json}")
+                            return query_json
+                        else:
+                            logger.error(f"Could not extract JSON from GPT response: {response_content}")
+                            return None
+                    else:
+                        logger.error(f"Unexpected GPT response structure: {result}")
+                        return None
+                else:
+                    logger.error(f"GPT API Error {response.status}: {raw_response}")
+                    return None
+    except Exception as e:
+        logger.error(f"Error generating query with GPT: {str(e)}")
+        return None
+
+# Logging setup
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
-async def engagement_analysis(parameters: dict):
-    """
-    Engagement analysis: Analyze total revenue grouped by payment method.
-    """
-    query = {
-        "query": {"match_all": {}},
-        "aggs": {
-            "payment_engagement": {
-                "terms": {"field": "PaymentMethod"},
-                "aggs": {"total_revenue": {"sum": {"field": "TotalCharges"}}}
-            }
+@router.post("/adhoc/")
+async def perform_adhoc_analysis(
+    analysis_type: str = Query(..., description="Type of analysis to perform"),
+    body: Optional[Dict[str, Any]] = Body(default=None, example={
+        "filters": {
+            "Churn": True,
+            "InternetService": "Fiber optic"
+        },
+        "aggregations": {
+            "tenure": "range",
+            "MonthlyCharges": "avg"
         }
-    }
-
-    response = search_data("telco_customer_churn_index", query)
-    buckets = response.get("aggregations", {}).get("payment_engagement", {}).get("buckets", [])
-    return [{"payment_method": b["key"], "total_revenue": b["total_revenue"]["value"]} for b in buckets]
-
-
-async def revenue_leakage_analysis(parameters: dict):
+    })
+):
     """
-    Revenue leakage: Analyze revenue lost by churned customers grouped by a segment.
+    Perform ad-hoc analysis.
+    Activates GPT for query generation if input is empty, partial, or ambiguous.
     """
-    segment_field = parameters.get("segment", "Contract")
-    query = {
-        "query": {"term": {"Churn": True}},  # Filter churned customers
-        "aggs": {
-            "segment_revenue": {
-                "terms": {"field": segment_field},
-                "aggs": {"total_revenue_lost": {"sum": {"field": "TotalCharges"}}}
-            }
+    try:
+        # Determine if GPT is needed
+        use_gpt = False
+        if not body:  # Empty input
+            use_gpt = True
+            logger.info("Empty input detected. Activating GPT for query generation.")
+        elif not body.get("filters") or not body.get("aggregations"):  # Partial input
+            use_gpt = True
+            logger.info("Partial input detected. Activating GPT for query generation.")
+        elif analysis_type and analysis_type not in ["basic", "predefined"]:  # Abstract input
+            use_gpt = True
+            logger.info(f"Abstract analysis_type '{analysis_type}' detected. Activating GPT.")
+
+        # Use GPT to generate query if needed
+        if use_gpt:
+            gpt_generated_query = await generate_async(
+                model=model_name,
+                analysis_type=analysis_type,
+                parameters=body or {}
+            )
+            if not gpt_generated_query:
+                raise HTTPException(status_code=500, detail="Failed to generate query using GPT")
+            es_query = gpt_generated_query
+        else:
+            # Manually construct Elasticsearch query
+            es_query = {"size": 0, "query": {"bool": {"filter": []}}, "aggs": {}}
+
+            # Add filters
+            if "filters" in body:
+                for field, value in body["filters"].items():
+                    if isinstance(value, dict):  # Range query
+                        es_query["query"]["bool"]["filter"].append({"range": {field: value}})
+                    else:  # Term query
+                        es_query["query"]["bool"]["filter"].append({"term": {field: value}})
+            
+            # Add aggregations
+            if "aggregations" in body:
+                for field, agg_type in body["aggregations"].items():
+                    if agg_type == "range":
+                        es_query["aggs"][field] = {
+                            "range": {
+                                "field": field,
+                                "ranges": [
+                                    {"key": "short", "to": 12},
+                                    {"key": "medium", "from": 12, "to": 24},
+                                    {"key": "long", "from": 24}
+                                ]
+                            }
+                        }
+                    elif agg_type == "avg":
+                        es_query["aggs"][field] = {"avg": {"field": field}}
+                    elif agg_type == "sum":
+                        es_query["aggs"][field] = {"sum": {"field": field}}
+                    elif agg_type == "terms":
+                        es_query["aggs"][field] = {"terms": {"field": field}}
+
+        # Log and execute query
+        logger.debug(f"Elasticsearch Query: {json.dumps(es_query, indent=2)}")
+        response = search_data("telco_customer_churn_index", es_query)
+
+        # Process response
+        response_data = response.body if hasattr(response, "body") else dict(response)
+        return {
+            "results": response_data.get("hits", {}).get("hits", []),
+            "aggregations": response_data.get("aggregations", {})
         }
-    }
 
-    response = search_data("telco_customer_churn_index", query)
-    buckets = response.get("aggregations", {}).get("segment_revenue", {}).get("buckets", [])
-    return [{"segment": b["key"], "revenue_lost": b["total_revenue_lost"]["value"]} for b in buckets]
-
-
-async def churn_heatmap_analysis(parameters: dict):
-    """
-    Churn heatmap: Analyze churn likelihood across multiple dimensions.
-    """
-    x_field = parameters.get("x_field", "InternetService")
-    y_field = parameters.get("y_field", "MonthlyCharges")
-    query = {
-        "query": {"match_all": {}},
-        "aggs": {
-            "x_field_buckets": {
-                "terms": {"field": x_field},
-                "aggs": {
-                    "y_field_buckets": {
-                        "terms": {"field": y_field},
-                        "aggs": {"churn_likelihood": {"avg": {"field": "Churn"}}}
-                    }
-                }
-            }
-        }
-    }
-
-    response = search_data("telco_customer_churn_index", query)
-    x_buckets = response.get("aggregations", {}).get("x_field_buckets", {}).get("buckets", [])
-    heatmap_data = []
-    for x_bucket in x_buckets:
-        for y_bucket in x_bucket.get("y_field_buckets", {}).get("buckets", []):
-            heatmap_data.append({
-                "x_field": x_bucket["key"],
-                "y_field": y_bucket["key"],
-                "churn_likelihood": y_bucket["churn_likelihood"]["value"]
-            })
-    return heatmap_data
-
-
-async def stacked_bar_analysis(parameters: dict):
-    """
-    Stacked bar analysis: Analyze churned vs. non-churned revenue contribution by segments.
-    """
-    fields = parameters.get("fields", ["Contract", "Churn"])
-    query = {
-        "query": {"match_all": {}},
-        "aggs": {
-            "field_buckets": {
-                "terms": {"field": fields[0]},
-                "aggs": {
-                    "churn_buckets": {
-                        "terms": {"field": fields[1]},
-                        "aggs": {"total_revenue": {"sum": {"field": "TotalCharges"}}}
-                    }
-                }
-            }
-        }
-    }
-
-    response = search_data("telco_customer_churn_index", query)
-    field_buckets = response.get("aggregations", {}).get("field_buckets", {}).get("buckets", [])
-    stacked_data = []
-    for field_bucket in field_buckets:
-        for churn_bucket in field_bucket.get("churn_buckets", {}).get("buckets", []):
-            stacked_data.append({
-                "segment": field_bucket["key"],
-                "churn_status": churn_bucket["key"],
-                "total_revenue": churn_bucket["total_revenue"]["value"]
-            })
-    return stacked_data
-
-
-async def cohort_analysis(parameters: dict):
-    """
-    Cohort analysis: Analyze churn patterns over tenure cohorts.
-    """
-    query = {
-        "query": {"match_all": {}},
-        "aggs": {
-            "tenure_cohorts": {
-                "range": {
-                    "field": "tenure",
-                    "ranges": [
-                        {"to": 12}, {"from": 12, "to": 24}, {"from": 24, "to": 36},
-                        {"from": 36, "to": 48}, {"from": 48, "to": 60}, {"from": 60}
-                    ]
-                },
-                "aggs": {
-                    "churned_customers": {"filter": {"term": {"Churn": True}}}
-                }
-            }
-        }
-    }
-
-    response = search_data("telco_customer_churn_index", query)
-    tenure_buckets = response.get("aggregations", {}).get("tenure_cohorts", {}).get("buckets", [])
-    return [{"tenure_range": b["key"], "churned_customers": b["churned_customers"]["doc_count"]} for b in tenure_buckets]
+    except Exception as e:
+        logger.error(f"Error performing ad-hoc analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

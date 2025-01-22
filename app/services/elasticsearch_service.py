@@ -1,5 +1,5 @@
 from elasticsearch import Elasticsearch, exceptions
-
+import logging
 # Initialize Elasticsearch client
 es = Elasticsearch("http://localhost:9200")
 
@@ -35,6 +35,7 @@ def search_data(index_name, query):
     """
     try:
         response = es.search(index=index_name, body=query)
+        logging.info("Elasticsearch Raw Response: %s", response)
         return response
     except exceptions.RequestError as e:
         print(f"Search request error: {e.info}")
