@@ -2,32 +2,49 @@
 
 ## Table des Matières
 - [1. Introduction](#1-introduction)
-- [2. Architecture du Système](#2-architecture-du-système)
-- [3. Rôle de chaque Microservice](#3-rôle-de-chaque-microservice)
-  - [3.1 Chat Agent Service](#31-chat-agent-service)
-  - [3.2 Indexing Service](#32-indexing-service)
-  - [3.3 Media Service](#33-media-service)
-  - [3.4 Module Partagé](#34-module-partagé)
-- [4. Déploiement et Tests](#4-déploiement-et-tests)
-  - [4.1 Déploiement avec Kubernetes](#41-déploiement-avec-kubernetes)
-  - [4.2 Tests des Services](#42-tests-des-services)
-- [5. Interaction des Services](#5-interaction-des-services)
+- [2. Objectif Général](#2-objectif-général)
+- [3. Architecture du Système](#3-architecture-du-système)
+  - [3.1 Vue d'ensemble](#31-vue-densemble)
+  - [3.2 Architecture Basique RAG](#32-architecture-basique-rag)
+- [4. Composants Clés du Projet](#4-composants-clés-du-projet)
+  - [4.1 Service d'Indexation](#41-service-dindexation)
+  - [4.2 Service Agent Conversationnel](#42-service-agent-conversationnel)
+  - [4.3 Service Média](#43-service-média)
+  - [4.4 Composant Partagé](#44-composant-partagé)
+  - [4.5 Déploiement Kubernetes](#45-déploiement-kubernetes)
+- [5. Déploiement et Tests](#5-déploiement-et-tests)
+  - [5.1 Déploiement avec Docker Hub et Kubernetes](#51-déploiement-avec-docker-hub-et-kubernetes)
+  - [5.2 Vérification des Services](#52-vérification-des-services)
+  - [5.3 Exposition des Services](#53-exposition-des-services)
+- [6. Interaction des Services](#6-interaction-des-services)
+  - [6.1 Détails du Flux d’Interaction](#61-détails-du-flux-dinteraction)
+- [7. Conclusion](#7-conclusion)
 
 ---
 
 ## 1. Introduction
 
-Ce document décrit un système RAG (Retrieval-Augmented Generation) basé sur une architecture de microservices. Il inclut une vue d'ensemble des composants, leur rôle, les étapes de déploiement, et la manière dont les services interagissent pour fournir des réponses enrichies aux utilisateurs.
+Ce document décrit une plateforme modulaire d’indexation et d’interrogation de données multimodales, intégrant des modèles d’intelligence artificielle pour la recherche sémantique et la génération de réponses.
 
-## 2. Architecture du Système
+---
 
-Le système est composé de trois microservices principaux et d’un module partagé :
-- **Chat Agent Service** : Agent conversationnel.
-- **Indexing Service** : Service d'indexation de documents.
-- **Media Service** : Service de traitement multimédia.
-- **Module Partagé** : Gestion des index vectoriels.
+## 2. Objectif Général
 
-### Diagramme de l’Architecture
+Le projet repose sur FastAPI, ChromaDB et LlamaIndex pour traiter, indexer et interroger divers types de données textuelles et audiovisuelles. Il permet une recherche sémantique efficace et un accès structuré aux connaissances.
+
+---
+
+## 3. Architecture du Système
+
+### 3.1 Vue d’Ensemble
+
+Le système repose sur trois microservices principaux et un module partagé :
+- **Chat Agent Service** : Fournit un agent conversationnel.
+- **Indexing Service** : Service d’indexation de documents.
+- **Media Service** : Traitement multimédia.
+- **Composant Partagé** : Gestion des index vectoriels.
+
+### 3.2 Architecture RAG
 ```plaintext
                            ┌──────────────────────────┐
                            │  Client Utilisateur      │
@@ -51,116 +68,92 @@ Le système est composé de trois microservices principaux et d’un module part
 
 ---
 
-## 3. Rôle de chaque Microservice
+## 4. Composants Clés du Projet
 
-### 3.1 **Chat Agent Service**
+### 4.1 🔍 Service d’Indexation (indexing_service)
+- **Rôle** : Indexation de fichiers texte (.txt, .md), PDF et autres sources.
+- **Moteur** : LlamaIndex pour générer des embeddings vectoriels.
+- **API** :
+  - `/indexing/ingest` → Upload et indexation d’un document.
+  - `/documents` → Liste des documents indexés.
 
-- **Fichier principal** : `chat_agent_service.py`
-- **Rôle** :
-  - Fournir un agent conversationnel qui répond aux requêtes utilisateur.
-  - Utiliser un modèle LLM (GPT-3.5 Turbo) et un agent ReAct pour analyser et répondre aux requêtes.
-  - Intégrer un moteur de recherche sémantique pour extraire les informations pertinentes des documents indexés.
-- **Points clés** :
-  - Modèle LLM configuré avec des embeddings HuggingFace.
-  - Réponses enrichies avec contexte.
+### 4.2 🤖 Service Agent Conversationnel (chat_agent_service)
+- **Rôle** : Répond aux requêtes utilisateurs via un agent ReAct basé sur GPT-3.5.
+- **Moteur** : OpenAI GPT-3.5 + LlamaIndex.
+- **API** :
+  - `/chat/chat-with-agent` → Envoi d’une requête à l’agent IA.
 
----
+### 4.3 📽️ Service Média (media_service)
+- **Rôle** : Extraction et indexation de contenu multimédia.
+- **API** :
+  - `/media/process-and-index` → Traitement d’une vidéo.
+  - `/media/process-and-index-image` → Analyse et indexation d’une image.
 
-### 3.2 **Indexing Service**
+### 4.4 🗄️ Composant Partagé (vector_index_utils)
+- **Rôle** : Gestion centralisée de l’index vectoriel.
+- **Moteur** : LlamaIndex + OpenAI.
 
-- **Fichier principal** : `indexing_service.py`
-- **Rôle** :
-  - Gérer l’indexation de documents PDF, TXT et Markdown.
-  - Transformer les documents en représentations vectorielles.
-  - Ajouter ces représentations à un index vectoriel centralisé.
-- **Fonctionnalités clés** :
-  - Traitement automatique des documents avec des pipelines de transformation.
-  - Gestion des métadonnées pour chaque document indexé.
-
----
-
-### 3.3 **Media Service**
-
-- **Fichier principal** : `media_service.py`
-- **Rôle** :
-  - Télécharger et analyser les contenus multimédias (vidéos, images).
-  - Extraire des données (audio, frames, transcription) pour créer des documents textuels.
-  - Indexer ces données pour une recherche ultérieure.
-- **Fonctionnalités clés** :
-  - Intégration avec Google Cloud Vision pour l’OCR.
-  - Génération de notes détaillées à partir de vidéos.
+### 4.5 📦 Déploiement Kubernetes
+- **Objectif** : Conteneurisation et orchestration des services.
+- **Composants** :
+  - Déploiements Kubernetes.
+  - Volume partagé pour stocker les fichiers indexés.
 
 ---
 
-### 3.4 **Module Partagé : Gestion des Index Vectoriels**
+## 5. Déploiement et Tests
 
-- **Fichier principal** : `vector_index_utils.py`
-- **Rôle** :
-  - Fournir une interface pour créer, mettre à jour et récupérer l'index vectoriel.
-  - Assurer un stockage persistant et une utilisation partagée entre les services.
-- **Fonctionnalités clés** :
-  - Embeddings basés sur Hugging Face.
-  - Pipeline d’ingestion configuré pour une segmentation optimisée des documents.
-
----
-
-## 4. Déploiement et Tests
-
-### 4.1 Déploiement avec Kubernetes
-
-Les services sont déployés via des manifestes YAML, chacun décrivant un déploiement et un service Kubernetes associé.
-
-#### **Commandes de Déploiement**
+### 5.1 Déploiement avec Docker Hub et Kubernetes
+- **Cloner le dépôt** :
+```sh
+git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO.git
+cd YOUR_REPO/k8s
+```
+- **Appliquer la configuration du volume** :
 ```sh
 kubectl apply -f shared-volume.yml
+```
+- **Pull des images Docker** :
+```sh
+docker pull ashraf081/indexing-service:latest
+docker pull ashraf081/media-service:latest
+docker pull ashraf081/chat-agent-service:latest
+```
+- **Déploiement Kubernetes** :
+```sh
 kubectl apply -f indexing-service-deployment.yml
 kubectl apply -f media-service-deployment.yml
 kubectl apply -f chat-agent-service-deployment.yml
 ```
 
-#### **Fichiers YAML Principaux**
-- **Indexing Service** : `indexing-service-deployment.yml`
-- **Chat Agent Service** : `chat-agent-service-deployment.yml`
-- **Media Service** : `media-service-deployment.yml`
-- **Volume Partagé** : `shared-volume.yml`
-
-### 4.2 Tests des Services
-
-Utilisez cURL ou Postman pour interagir avec chaque service :
-
-#### **Indexer un Document**
+### 5.2 Vérification des Services
 ```sh
-curl -X POST "http://indexing-service:8001/indexing/ingest" -F "file=@test.pdf"
+kubectl get pods
+kubectl get services
 ```
 
-#### **Poser une Question au Chat Agent**
+### 5.3 Exposition des Services
 ```sh
-curl -X POST "http://chat-agent-service:8003/chat/chat-with-agent" -H "Content-Type: application/json" -d '{"query": "Quels documents sont disponibles ?"}'
-```
-
-#### **Indexer une Vidéo via le Media Service**
-```sh
-curl -X POST "http://media-service:8002/media/process-and-index" -H "Content-Type: application/json" -d '{"url": "https://youtube.com/video"}'
+kubectl port-forward svc/indexing-service 8001:8001
+kubectl port-forward svc/media-service 8002:8002
+kubectl port-forward svc/chat-agent-service 8003:8003
 ```
 
 ---
 
-## 5. Interaction des Services
+## 6. Interaction des Services
 
-### Flux d’Interaction
-
-1. **Indexation** : Les documents soumis via le `Indexing Service` sont transformés et ajoutés à l’index vectoriel.
-2. **Requête Utilisateur** : Les utilisateurs posent des questions au `Chat Agent Service`.
-3. **Recherche Sémantique** : Le `Chat Agent Service` interroge l’index vectoriel pour récupérer les documents pertinents.
-4. **Génération de Réponses** : Les réponses sont générées en tenant compte du contexte des documents récupérés.
-5. **Traitement Multimédia** : Le `Media Service` traite les vidéos et images pour enrichir les données indexées.
-
-### Points Clés
-- **Persistant** : Les données restent accessibles grâce à l’index partagé.
-- **Optimisé** : Les pipelines garantissent une recherche rapide et pertinente.
-- **Scalable** : Kubernetes permet une montée en charge selon les besoins.
+### 6.1 Détails du Flux d’Interaction
+1. **Indexation** : Documents soumis via `Indexing Service` → Vectorisation.
+2. **Traitement Multimédia** : Extraction et transcription.
+3. **Requête Utilisateur** : Analyse et récupération des documents pertinents.
+4. **Génération de Réponse** : LLM enrichit la réponse avec du contexte.
 
 ---
 
-### Merci d’utiliser notre système RAG pour une gestion intelligente des connaissances.
+## 7. Conclusion
+
+Le projet combine NLP avancé, agents conversationnels et traitement multimédia pour fournir un moteur de recherche sémantique puissant, scalable et structuré.
+
+🚀 **Votre application est maintenant prête à être utilisée !** 🎉
 
