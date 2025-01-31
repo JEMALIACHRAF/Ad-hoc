@@ -106,7 +106,7 @@ Le système repose sur trois microservices principaux et un module partagé :
 ### 5.1 Déploiement avec Docker Hub et Kubernetes
 - **Cloner le dépôt** :
 ```sh
-git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPO.git
+git clone https://github.com/JEMALIACHRAF/Note-Gestion.git
 cd YOUR_REPO/k8s
 ```
 - **Appliquer la configuration du volume** :
@@ -156,4 +156,3 @@ kubectl port-forward svc/chat-agent-service 8003:8003
 Le projet combine NLP avancé, agents conversationnels et traitement multimédia pour fournir un moteur de recherche sémantique puissant, scalable et structuré.
 
 🚀 **Votre application est maintenant prête à être utilisée !** 🎉
-
