@@ -1,3 +1,115 @@
+# Rapport sur l'Analyse des Données GPS et Climatiques
+
+## Introduction
+Ce projet porte sur l'analyse des données GPS, climatiques et d'activités auto-déclarées recueillies sur une semaine. Les objectifs incluent la segmentation, la visualisation, le nettoyage et l'analyse des trajectoires, ainsi que l'évaluation des activités par rapport aux données collectées.
+
+### Données Utilisées
+- **Données GPS** : Coordonnées spatiales collectées à haute fréquence.
+- **Données Climatiques** : Paramètres à échantillonnage par minute (PM2.5, PM10, NO2, température, humidité).
+- **Données d'Activités** : Changements contextuels enregistrés manuellement.
+
+## Méthodologie
+
+### Question 1 : Chargement des Données
+#### Approche
+1. **Lecture des fichiers CSV** :
+   - Données GPS, climatiques et d'activités chargées via la librairie pandas.
+   - Normalisation des horodatages pour assurer la cohérence temporelle.
+2. **Validation des données** :
+   - Vérification de la complétude des colonnes essentielles (timestamps, latitude, longitude, etc.).
+   - Conversion des formats irréguliers en un format standard uniforme.
+
+#### Résultats
+- **GPS** :
+  - 81 308 points collectés sur 7 jours.
+  - Données prêtes pour une segmentation temporelle.
+- **Climat** :
+  - Données étendues à 8 jours en raison de l'échantillonnage à haute fréquence.
+- **Activités** :
+  - Alignement temporel avec les données GPS, préparant les activités à des analyses croisées.
+
+### Question 2 : Segmentation des Données par Jour
+#### Approche
+1. **Filtrage Temporel** :
+   - Application d'un filtre basé sur les dates uniques extraites des timestamps.
+2. **Segmentation** :
+   - Découpage des données en blocs journaliers.
+3. **Validation** :
+   - Comptage des jours uniques dans chaque fichier pour assurer l'intégrité des segments.
+
+#### Résultats
+- **GPS** :
+  - 7 jours uniques confirmés (échantillons : 2019-10-21 à 2019-10-28, excluant le 2019-10-27).
+- **Climat** :
+  - 8 jours, reflétant un échantillonnage plus complet.
+- **Activités** :
+  - 7 jours alignés avec les segments GPS.
+
+### Question 3 : Transformation en Types Spatiaux et Visualisation
+#### Approche
+1. **Conversion en Types Spatiaux** :
+   - Utilisation de **GeoPandas** pour convertir les données GPS en types géographiques (Points).
+   - Création de trajectoires spatiotemporelles à l'aide de **MovingPandas**.
+2. **Visualisation des Trajectoires** :
+   - Représentation des trajectoires journalières.
+   - Cartographie des trajets combinés pour analyser les zones fréquentées.
+3. **Exportation** :
+   - Génération de fichiers GeoJSON pour une analyse future.
+
+### Question 4 : Nettoyage des Trajectoires et Validation Visuelle
+#### Approche
+1. **Calcul de la Vitesse** :
+   - La vitesse entre chaque point GPS est calculée en utilisant la distance de Haversine et les différences temporelles.
+   - Les vitesses excessives (>150 km/h) sont filtrées.
+2. **Lissage des Trajectoires** :
+   - Application d'une moyenne mobile sur les coordonnées GPS pour réduire les fluctuations dues au bruit.
+3. **Filtrage des Données avec DBSCAN** :
+   - DBSCAN est utilisé pour identifier et supprimer les points aberrants dans les données GPS.
+   - Chaque jour est traité séparément, avec conversion des coordonnées géographiques en mètres pour une meilleure précision.
+
+### Question 5 : Détection des Arrêts et Déplacements
+#### Approche
+1. **Définition des Paramètres** :
+   - Distance seuil pour identifier un arrêt : 5 mètres.
+   - Durée seuil pour confirmer un arrêt : 30 secondes.
+2. **Calcul des Arrêts et Déplacements** :
+   - Identification des arrêts en fonction des seuils de distance et de durée.
+   - Assignation d'un identifiant unique à chaque segment (arrêt ou déplacement).
+
+### Question 6 : Segmentation Basée sur les Arrêts et Déplacements
+#### Approche
+1. **Création des Segments** :
+   - Chaque arrêt et déplacement est associé à un identifiant de segment unique.
+   - Détermination des temps de début et de fin pour chaque segment.
+2. **Propagation aux Données Climatiques et d'Activités** :
+   - Utilisation de la fonction `merge_asof` pour associer chaque segment aux données climatiques et d'activités correspondantes.
+   - Ajustement des tolérances temporelles pour maximiser les correspondances.
+
+### Question 7 : Validation des Arrêts Détectés par Rapport aux Activités Auto-Reportées
+#### Approche
+1. **Fusion des Données Détectées et Déclarées** :
+   - Comparaison des arrêts détectés avec les arrêts auto-reportés en utilisant un appariement temporel précis.
+   - Utilisation de `merge_asof` avec une tolérance de 2 minutes pour lier les événements GPS aux déclarations manuelles.
+2. **Optimisation des Seuils de Détection** :
+   - Ajustement des seuils de distance et de durée d'arrêt en testant différentes configurations.
+   - Sélection des paramètres optimaux en maximisant le taux d'accord entre les arrêts détectés et déclarés.
+3. **Analyse des Discordances (Mismatches)** :
+   - Identification des écarts entre les arrêts auto-reportés et les arrêts détectés automatiquement.
+   - Vérification des erreurs potentielles de détection à l'aide de visualisations des désaccords.
+4. **Calcul du Taux d’Accord** :
+   - Création d’une colonne binaire `agreement` indiquant si un arrêt détecté correspond à un arrêt auto-reporté.
+   - Calcul du pourcentage de correspondance entre les deux sources.
+
+### Résultats Globaux
+- **Taux d'Accord Global** : 69.09 % des arrêts détectés coïncident avec les arrêts auto-reportés.
+- **Erreurs de Détection** :
+  - Nombre total de mismatches : 17.
+  - Des erreurs surviennent principalement lorsque les arrêts auto-reportés sont de très courte durée ou mal alignés temporellement avec les données GPS.
+- **Optimisation des Paramètres** :
+  - Seuil optimal trouvé : arrêt détecté si la distance < **5 mètres** et la durée > **5 secondes**.
+
+
+
 # 📂 Analyse des Trajectoires et Arrêts
 # MobilityDB Analysis - Trajectories and Stops
 
