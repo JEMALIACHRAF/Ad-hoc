@@ -4,9 +4,7 @@
 
 ## 🔍 Bilan des Questions 9 à 14
 
-### **👉 Question 9: Calcul des Centroides et des Distances des Segments d'Arrêt**
-## 1️⃣ Create & Populate Tables
-
+### **👉 Question 9  Create & Populate Tables**
 ### ✅ Create the `trajectories` Table
 ```sql
 CREATE TABLE trajectories (
