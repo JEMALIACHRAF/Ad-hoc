@@ -318,5 +318,119 @@ LIMIT 10;
 - Plusieurs trajets **exactement identiques** ont été détectés (**Hausdorff Distance = 0**).
 
 ---
-### 📅 **Prochaine étape : Question 15 (Air Quality Score - AQS) !** 🚀
+# MobilityDB Analysis: Air Quality Score (AQS) and Temporal Comparisons
+
+## **9️⃣ Create & Populate Tables**
+
+### **1️⃣ Create the `trajectories` Table**
+```sql
+CREATE TABLE trajectories (
+    id SERIAL PRIMARY KEY,
+    traj_id TEXT,
+    geometry GEOMETRY(LineString, 4326),
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    is_stop BOOLEAN
+);
+```
+
+### **2️⃣ Create the `json_import` Table**
+```sql
+CREATE TABLE json_import (
+    id SERIAL PRIMARY KEY,
+    data JSONB
+);
+```
+
+### **3️⃣ Load the MF-JSON Data into `json_import`**
+```sql
+INSERT INTO json_import (data)
+SELECT jsonb_array_elements(pg_read_file('/tmp/trajectories_mf.json')::jsonb);
+```
+
+### **4️⃣ Insert Data into `trajectories` Table**
+```sql
+INSERT INTO trajectories (traj_id, geometry, start_time, end_time, is_stop)
+SELECT
+    data->>'id' AS traj_id,
+    ST_GeomFromGeoJSON(
+        jsonb_build_object(
+            'type', 'LineString',
+            'coordinates', data->'geometry'->'coordinates'
+        )::TEXT
+    ) AS geometry,
+    (data->'properties'->>'start_time')::TIMESTAMP AS start_time,
+    (data->'properties'->>'end_time')::TIMESTAMP AS end_time,
+    (data->'properties'->>'is_stop')::BOOLEAN AS is_stop
+FROM json_import;
+```
+
+---
+
+## **15️⃣ Compute Air Quality Score (AQS)**
+### **Normalize PM2.5, PM10, and NO2 and compute AQS**
+```sql
+WITH normalized AS (
+    SELECT *,
+        (PM2_5 - MIN(PM2_5) OVER()) / NULLIF(MAX(PM2_5) OVER() - MIN(PM2_5) OVER(), 0) AS norm_PM2_5,
+        (PM10 - MIN(PM10) OVER()) / NULLIF(MAX(PM10) OVER() - MIN(PM10) OVER(), 0) AS norm_PM10,
+        (NO2 - MIN(NO2) OVER()) / NULLIF(MAX(NO2) OVER() - MIN(NO2) OVER(), 0) AS norm_NO2
+    FROM trajectories
+)
+SELECT id, start_time, end_time,
+       (norm_PM2_5 + norm_PM10 + norm_NO2) / 3 AS AQS
+FROM normalized;
+```
+
+---
+
+## **16️⃣ Rank Days by Ascending Cumulated AQS**
+### **Aggregate AQS per day and rank in ascending order**
+```sql
+WITH daily_aqs AS (
+    SELECT
+        DATE(start_time) AS day,
+        SUM((PM2_5 - MIN(PM2_5) OVER()) / NULLIF(MAX(PM2_5) OVER() - MIN(PM2_5) OVER(), 0) +
+            (PM10 - MIN(PM10) OVER()) / NULLIF(MAX(PM10) OVER() - MIN(PM10) OVER(), 0) +
+            (NO2 - MIN(NO2) OVER()) / NULLIF(MAX(NO2) OVER() - MIN(NO2) OVER(), 0)) / 3 AS total_AQS
+    FROM trajectories
+    GROUP BY day
+)
+SELECT day, total_AQS
+FROM daily_aqs
+ORDER BY total_AQS ASC;
+```
+
+---
+
+## **17️⃣ Compare AQS Between Day/Night & Stops/Moves**
+### **Compute AQS separately for day, night, stops, and moves**
+```sql
+WITH aqs_by_period AS (
+    SELECT
+        CASE
+            WHEN EXTRACT(HOUR FROM start_time) BETWEEN 6 AND 18 THEN 'Day'
+            ELSE 'Night'
+        END AS time_period,
+        is_stop,
+        AVG((PM2_5 - MIN(PM2_5) OVER()) / NULLIF(MAX(PM2_5) OVER() - MIN(PM2_5) OVER(), 0) +
+            (PM10 - MIN(PM10) OVER()) / NULLIF(MAX(PM10) OVER() - MIN(PM10) OVER(), 0) +
+            (NO2 - MIN(NO2) OVER()) / NULLIF(MAX(NO2) OVER() - MIN(NO2) OVER(), 0)) / 3 AS avg_AQS,
+        MIN((PM2_5 - MIN(PM2_5) OVER()) / NULLIF(MAX(PM2_5) OVER() - MIN(PM2_5) OVER(), 0) +
+            (PM10 - MIN(PM10) OVER()) / NULLIF(MAX(PM10) OVER() - MIN(PM10) OVER(), 0) +
+            (NO2 - MIN(NO2) OVER()) / NULLIF(MAX(NO2) OVER() - MIN(NO2) OVER(), 0)) / 3 AS min_AQS,
+        MAX((PM2_5 - MIN(PM2_5) OVER()) / NULLIF(MAX(PM2_5) OVER() - MIN(PM2_5) OVER(), 0) +
+            (PM10 - MIN(PM10) OVER()) / NULLIF(MAX(PM10) OVER() - MIN(PM10) OVER(), 0) +
+            (NO2 - MIN(NO2) OVER()) / NULLIF(MAX(NO2) OVER() - MIN(NO2) OVER(), 0)) / 3 AS max_AQS
+    FROM trajectories
+    GROUP BY time_period, is_stop
+)
+SELECT time_period, is_stop, avg_AQS, min_AQS, max_AQS
+FROM aqs_by_period
+ORDER BY time_period, is_stop;
+```
+
+---
+
+
 
