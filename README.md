@@ -1,7 +1,54 @@
 # 📂 Analyse des Trajectoires et Arrêts
 
-## 🔍 Bilan des Questions 10 à 14
+## 🔍 Bilan des Questions 9 à 14
 
+
+# MobilityDB Analysis - Trajectories and Stops
+### **👉 Question 9: Calcul des Centroides et des Distances des Segments d'Arrêt**
+## 1️⃣ Create & Populate Tables
+
+### ✅ Create the `trajectories` Table
+```sql
+CREATE TABLE trajectories (
+    id SERIAL PRIMARY KEY,
+    traj_id TEXT,
+    geometry GEOMETRY(LineString, 4326),
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    is_stop BOOLEAN
+);
+```
+
+### ✅ Create the `json_import` Table
+```sql
+CREATE TABLE json_import (
+    id SERIAL PRIMARY KEY,
+    data JSONB
+);
+```
+
+### ✅ Load the MF-JSON Data into `json_import`
+```sql
+INSERT INTO json_import (data)
+SELECT jsonb_array_elements(pg_read_file('/tmp/trajectories_mf.json')::jsonb);
+```
+
+### ✅ Insert Data into `trajectories` Table
+```sql
+INSERT INTO trajectories (traj_id, geometry, start_time, end_time, is_stop)
+SELECT
+    data->>'id' AS traj_id,
+    ST_GeomFromGeoJSON(
+        jsonb_build_object(
+            'type', 'LineString',
+            'coordinates', data->'geometry'->'coordinates'
+        )::TEXT
+    ) AS geometry,
+    (data->'properties'->>'start_time')::TIMESTAMP AS start_time,
+    (data->'properties'->>'end_time')::TIMESTAMP AS end_time,
+    (data->'properties'->>'is_stop')::BOOLEAN AS is_stop
+FROM json_import;
+```
 ---
 ### **👉 Question 10: Calcul des Centroides et des Distances des Segments d'Arrêt**
 #### 🌟 Objectif :
