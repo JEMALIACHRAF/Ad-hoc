@@ -1,158 +1,165 @@
-# Documentation du Système RAG basé sur des Microservices
+# 📂 Analyse des Trajectoires et Arrêts
 
-## Table des Matières
-- [1. Introduction](#1-introduction)
-- [2. Objectif Général](#2-objectif-général)
-- [3. Architecture du Système](#3-architecture-du-système)
-  - [3.1 Vue d'ensemble](#31-vue-densemble)
-  - [3.2 Architecture Basique RAG](#32-architecture-basique-rag)
-- [4. Composants Clés du Projet](#4-composants-clés-du-projet)
-  - [4.1 Service d'Indexation](#41-service-dindexation)
-  - [4.2 Service Agent Conversationnel](#42-service-agent-conversationnel)
-  - [4.3 Service Média](#43-service-média)
-  - [4.4 Composant Partagé](#44-composant-partagé)
-  - [4.5 Déploiement Kubernetes](#45-déploiement-kubernetes)
-- [5. Déploiement et Tests](#5-déploiement-et-tests)
-  - [5.1 Déploiement avec Docker Hub et Kubernetes](#51-déploiement-avec-docker-hub-et-kubernetes)
-  - [5.2 Vérification des Services](#52-vérification-des-services)
-  - [5.3 Exposition des Services](#53-exposition-des-services)
-- [6. Interaction des Services](#6-interaction-des-services)
-  - [6.1 Détails du Flux d’Interaction](#61-détails-du-flux-dinteraction)
-- [7. Conclusion](#7-conclusion)
+## 🔍 Bilan des Questions 10 à 14
 
 ---
+### **👉 Question 10: Calcul des Centroides et des Distances des Segments d'Arrêt**
+#### 🌟 Objectif :
+Déterminer la localisation centrale de chaque arrêt, sa durée et l'incertitude de sa position via la distance maximale par rapport à son enveloppe convexe.
 
-## 1. Introduction
-
-Ce document décrit une plateforme modulaire d’indexation et d’interrogation de données multimodales, intégrant des modèles d’intelligence artificielle pour la recherche sémantique et la génération de réponses.
+#### 📝 Requête SQL :
+```sql
+SELECT
+    id AS stop_id,
+    ST_Centroid(geometry) AS centroid,
+    start_time,
+    end_time,
+    end_time - start_time AS duration,
+    ST_MaxDistance(geometry, ST_Envelope(geometry)) AS max_bbox_distance
+FROM trajectories
+WHERE is_stop = TRUE;
+```
+#### 📊 Analyse des Résultats :
+- Chaque **stop_id** représente un segment d'arrêt identifié.
+- **ST_Centroid(geometry)** permet d'obtenir un point central approximatif de l'arrêt.
+- **ST_MaxDistance()** donne la distance maximale entre le centroid et l'enveloppe convexe, indiquant le niveau d'incertitude de la position de l'arrêt.
+- Exemples :
+  - `stop_id = 1` a duré **5min 56s** avec une incertitude de **5.67e-6 degrés**.
+  - `stop_id = 23` a duré **6h11min**, possiblement une résidence.
 
 ---
+### **👉 Question 11: Identification des Arrêts Récurrents**
+#### 🌟 Objectif :
+Associer les arrêts proches et dont les boîtes englobantes s'intersectent sous une même **stop_id**.
 
-## 2. Objectif Général
-
-Le projet repose sur FastAPI, ChromaDB et LlamaIndex pour traiter, indexer et interroger divers types de données textuelles et audiovisuelles. Il permet une recherche sémantique efficace et un accès structuré aux connaissances.
+#### 📝 Requête SQL :
+```sql
+WITH stop_clusters AS (
+    SELECT
+        t1.id AS stop1_id,
+        t2.id AS stop2_id,
+        ST_Distance(ST_Centroid(t1.geometry), ST_Centroid(t2.geometry)) AS centroid_distance,
+        ST_Intersects(ST_Envelope(t1.geometry), ST_Envelope(t2.geometry)) AS bbox_intersection
+    FROM trajectories t1
+    JOIN trajectories t2 ON t1.id < t2.id
+    WHERE t1.is_stop = TRUE AND t2.is_stop = TRUE
+)
+UPDATE trajectories
+SET stop_id = stop1_id
+FROM stop_clusters
+WHERE trajectories.id = stop_clusters.stop2_id
+AND centroid_distance < 50 -- Seulement si les stops sont à moins de 50m
+AND bbox_intersection = TRUE;
+```
+#### 📊 Analyse des Résultats :
+- **201 arrêts ont été regroupés** sous des identifiants communs.
+- Exemples :
+  - `stop_id = 1` (45 visites)
+  - `stop_id = 178` (36 visites)
 
 ---
+### **👉 Question 12: Classement des Arrêts par Fréquence et Durée**
+#### 🌟 Objectif :
+Identifier les arrêts les plus visités et les plus longs.
 
-## 3. Architecture du Système
+#### 📝 Requêtes SQL :
+**Classement par Fréquence :**
+```sql
+SELECT stop_id, COUNT(*) AS visit_count
+FROM trajectories
+WHERE is_stop = TRUE
+GROUP BY stop_id
+ORDER BY visit_count DESC;
+```
+**Classement par Durée Totale :**
+```sql
+SELECT stop_id, SUM(end_time - start_time) AS total_duration
+FROM trajectories
+WHERE is_stop = TRUE
+GROUP BY stop_id
+ORDER BY total_duration DESC;
+```
+#### 📊 Analyse :
+- **Stop_id 1** est le plus visité (**45 visites**).
+- **Stop_id 269** a la plus longue durée cumulée (**12h13min**).
 
-### 3.1 Vue d’Ensemble
+**Attribution des labels "Home" et "Work" :**
+```sql
+UPDATE trajectories
+SET stop_label = 'Home'
+WHERE stop_id = (SELECT stop_id FROM trajectories WHERE is_stop = TRUE GROUP BY stop_id ORDER BY COUNT(*) DESC LIMIT 1);
 
-Le système repose sur trois microservices principaux et un module partagé :
-- **Chat Agent Service** : Fournit un agent conversationnel.
-- **Indexing Service** : Service d’indexation de documents.
-- **Media Service** : Traitement multimédia.
-- **Composant Partagé** : Gestion des index vectoriels.
-
-### 3.2 Architecture RAG
-```plaintext
-                           ┌──────────────────────────┐
-                           │  Client Utilisateur      │
-                           └──────────┬──────────────┘
-                                      │
-                        ┌─────────────▼──────────────┐
-                        │  Chat Agent Service        │
-                        │  (chat_agent_service.py)   │
-                        └───────┬───────────┬───────┘
-                                │           │
-                  ┌─────────────▼───┐    ┌──▼───────────────┐
-                  │Indexing Service │    │ Media Service    │
-                  │(indexing_serv.) │    │ (media_service)  │
-                  └─────────────┬───┘    └──┬───────────────┘
-                                │           │
-                       ┌────────▼───────────▼───────┐
-                       │  Stockage et Index Vector. │
-                       │  (vector_index_utils.py)  │
-                       └───────────────────────────┘
+UPDATE trajectories
+SET stop_label = 'Work'
+WHERE stop_id = (SELECT stop_id FROM trajectories WHERE is_stop = TRUE GROUP BY stop_id ORDER BY COUNT(*) DESC OFFSET 1 LIMIT 1);
 ```
 
 ---
+### **👉 Question 13: Classement des Trajectoires Mobiles par Distance et Durée**
+#### 🌟 Objectif :
+Trouver les trajets les plus longs en distance et en temps.
 
-## 4. Composants Clés du Projet
-
-### 4.1 🔍 Service d’Indexation (indexing_service)
-- **Rôle** : Indexation de fichiers texte (.txt, .md), PDF et autres sources.
-- **Moteur** : LlamaIndex pour générer des embeddings vectoriels.
-- **API** :
-  - `/indexing/ingest` → Upload et indexation d’un document.
-  - `/documents` → Liste des documents indexés.
-
-### 4.2 🤖 Service Agent Conversationnel (chat_agent_service)
-- **Rôle** : Répond aux requêtes utilisateurs via un agent ReAct basé sur GPT-3.5.
-- **Moteur** : OpenAI GPT-3.5 + LlamaIndex.
-- **API** :
-  - `/chat/chat-with-agent` → Envoi d’une requête à l’agent IA.
-
-### 4.3 📽️ Service Média (media_service)
-- **Rôle** : Extraction et indexation de contenu multimédia.
-- **API** :
-  - `/media/process-and-index` → Traitement d’une vidéo.
-  - `/media/process-and-index-image` → Analyse et indexation d’une image.
-
-### 4.4 🗄️ Composant Partagé (vector_index_utils)
-- **Rôle** : Gestion centralisée de l’index vectoriel.
-- **Moteur** : LlamaIndex + OpenAI.
-
-### 4.5 📦 Déploiement Kubernetes
-- **Objectif** : Conteneurisation et orchestration des services.
-- **Composants** :
-  - Déploiements Kubernetes.
-  - Volume partagé pour stocker les fichiers indexés.
+#### 📝 Requêtes SQL :
+**Distance Totale :**
+```sql
+SELECT id, SUM(ST_Length(geometry::geography)) AS total_distance
+FROM trajectories
+WHERE is_stop = FALSE
+GROUP BY id
+ORDER BY total_distance DESC;
+```
+**Durée Totale :**
+```sql
+SELECT id, SUM(end_time - start_time) AS total_duration
+FROM trajectories
+WHERE is_stop = FALSE
+GROUP BY id
+ORDER BY total_duration DESC;
+```
+#### 📊 Analyse :
+- Le trajet `id = 409` est le plus long (**57.2 km**, **9h52min**).
+- Le trajet `id = 314` est le 2ᵗʰ plus long (**15.4 km**, **3h03min**).
 
 ---
+### **👉 Question 14: Identification des Trajectoires Répétées**
+#### 🌟 Objectif :
+Trouver des trajectoires similaires selon différents critères.
 
-## 5. Déploiement et Tests
-
-### 5.1 Déploiement avec Docker Hub et Kubernetes
-- **Cloner le dépôt** :
-```sh
-git clone https://github.com/JEMALIACHRAF/Note-Gestion.git
-cd YOUR_REPO/k8s
+#### 📝 Requêtes SQL :
+**Distances Similaires :**
+```sql
+SELECT t1.id, t2.id,
+       ABS(ST_Length(t1.geometry::geography) - ST_Length(t2.geometry::geography)) AS distance_diff
+FROM trajectories t1
+JOIN trajectories t2 ON t1.id < t2.id
+WHERE t1.is_stop = FALSE AND t2.is_stop = FALSE
+ORDER BY distance_diff
+LIMIT 10;
 ```
-- **Appliquer la configuration du volume** :
-```sh
-kubectl apply -f shared-volume.yml
+**Points de Départ et d'Arrivée Similaires :**
+```sql
+SELECT t1.id AS traj1, t2.id AS traj2
+FROM trajectories t1
+JOIN trajectories t2
+ON t1.id < t2.id
+WHERE t1.is_stop = FALSE AND t2.is_stop = FALSE
+AND ST_DWithin(ST_StartPoint(t1.geometry)::geography, ST_StartPoint(t2.geometry)::geography, 100)
+AND ST_DWithin(ST_EndPoint(t1.geometry)::geography, ST_EndPoint(t2.geometry)::geography, 100)
+ORDER BY traj1, traj2;
 ```
-- **Pull des images Docker** :
-```sh
-docker pull ashraf081/indexing-service:latest
-docker pull ashraf081/media-service:latest
-docker pull ashraf081/chat-agent-service:latest
+**Distance de Hausdorff :**
+```sql
+SELECT t1.id AS traj1, t2.id AS traj2,
+       ST_HausdorffDistance(t1.geometry, t2.geometry) AS shape_distance
+FROM trajectories t1
+JOIN trajectories t2 ON t1.id < t2.id
+WHERE t1.is_stop = FALSE AND t2.is_stop = FALSE
+ORDER BY shape_distance
+LIMIT 10;
 ```
-- **Déploiement Kubernetes** :
-```sh
-kubectl apply -f indexing-service-deployment.yml
-kubectl apply -f media-service-deployment.yml
-kubectl apply -f chat-agent-service-deployment.yml
-```
-
-### 5.2 Vérification des Services
-```sh
-kubectl get pods
-kubectl get services
-```
-
-### 5.3 Exposition des Services
-```sh
-kubectl port-forward svc/indexing-service 8001:8001
-kubectl port-forward svc/media-service 8002:8002
-kubectl port-forward svc/chat-agent-service 8003:8003
-```
+#### 📊 Analyse :
+- Plusieurs trajets **exactement identiques** ont été détectés (**Hausdorff Distance = 0**).
 
 ---
+### 📅 **Prochaine étape : Question 15 (Air Quality Score - AQS) !** 🚀
 
-## 6. Interaction des Services
-
-### 6.1 Détails du Flux d’Interaction
-1. **Indexation** : Documents soumis via `Indexing Service` → Vectorisation.
-2. **Traitement Multimédia** : Extraction et transcription.
-3. **Requête Utilisateur** : Analyse et récupération des documents pertinents.
-4. **Génération de Réponse** : LLM enrichit la réponse avec du contexte.
-
----
-
-## 7. Conclusion
-
-Le projet combine NLP avancé, agents conversationnels et traitement multimédia pour fournir un moteur de recherche sémantique puissant, scalable et structuré.
-
-🚀 **Votre application est maintenant prête à être utilisée !** 🎉
