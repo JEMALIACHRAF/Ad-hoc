@@ -12,14 +12,14 @@ Ce projet porte sur l'analyse des données GPS, climatiques et d'activités auto
 
 ### Question 1 : Chargement des Données
 #### Approche
-1. **Lecture des fichiers CSV** :
-   - Données GPS, climatiques et d'activités chargées via la librairie pandas.
-   - Normalisation des horodatages pour assurer la cohérence temporelle.
-2. **Validation des données** :
-   - Vérification de la complétude des colonnes essentielles (timestamps, latitude, longitude, etc.).
-   - Conversion des formats irréguliers en un format standard uniforme.
-
-#### Résultats
+1. **Méthodologie** :
+   -Lecture des fichiers CSV :
+    Chargement des données GPS, climatiques et d'activités avec pandas.
+    Conversion des timestamps en format standardisé.
+   -Validation des données :
+    Vérification de la présence des colonnes essentielles (latitude, longitude, timestamps, etc.).
+    Suppression des valeurs manquantes.
+2. **Résultats** :
 - **GPS** :
   - 81 308 points collectés sur 7 jours.
   - Données prêtes pour une segmentation temporelle.
@@ -58,48 +58,84 @@ Ce projet porte sur l'analyse des données GPS, climatiques et d'activités auto
 
 ### Question 4 : Nettoyage des Trajectoires et Validation Visuelle
 #### Approche
-1. **Calcul de la Vitesse** :
-   - La vitesse entre chaque point GPS est calculée en utilisant la distance de Haversine et les différences temporelles.
-   - Les vitesses excessives (>150 km/h) sont filtrées.
-2. **Lissage des Trajectoires** :
-   - Application d'une moyenne mobile sur les coordonnées GPS pour réduire les fluctuations dues au bruit.
-3. **Filtrage des Données avec DBSCAN** :
-   - DBSCAN est utilisé pour identifier et supprimer les points aberrants dans les données GPS.
-   - Chaque jour est traité séparément, avec conversion des coordonnées géographiques en mètres pour une meilleure précision.
-
+1. **Calcul de la vitesse entre points GPS**
+   -Pour chaque point GPS, la distance entre lui et le point précédent est calculée à l’aide de la formule de Haversine.
+   -Le temps écoulé entre les points est également mesuré.
+   -Une distribution des vitesses est analysée pour détecter les anomalies.
+2. **Filtrage des vitesses aberrantes**
+   -Une seuil de 150 km/h est appliqué :
+      Tous les points avec une vitesse calculée supérieure à ce seuil sont considérés comme aberrants et supprimés.
+3. **Lissage des trajectoires**
+   -Une moyenne mobile est appliquée sur les coordonnées GPS pour réduire les variations dues au bruit des capteurs GPS.
+   -L'objectif est d’obtenir des trajectoires plus fluides et naturelles.
+3. **Filtrage des points aberrants avec DBSCAN**
+   -DBSCAN (Density-Based Spatial Clustering of Applications with Noise) est utilisé pour identifier les outliers :
+      Il regroupe les points denses et élimine ceux qui ne font pas partie de groupes cohérents.
+      Les coordonnées GPS sont converties en mètres pour assurer une meilleure précision.
+   -Les valeurs aberrantes isolées (erreurs GPS ou artefacts de localisation) sont supprimées.
+   
 ### Question 5 : Détection des Arrêts et Déplacements
 #### Approche
-1. **Définition des Paramètres** :
-   - Distance seuil pour identifier un arrêt : 5 mètres.
-   - Durée seuil pour confirmer un arrêt : 30 secondes.
-2. **Calcul des Arrêts et Déplacements** :
-   - Identification des arrêts en fonction des seuils de distance et de durée.
-   - Assignation d'un identifiant unique à chaque segment (arrêt ou déplacement).
-
+1. **Définition des critères d’arrêt**
+   -Un arrêt est défini comme une position stationnaire où l’utilisateur ne se déplace pas pendant un certain temps.
+   -Deux paramètres clés sont utilisés :
+         Distance seuil : 5 mètres .
+         Durée seuil : 30 secondes .
+2. **Calcul des distances successives entre points GPS**
+   -La formule de Haversine est utilisée pour mesurer la distance entre chaque point GPS et le suivant.
+   -Si la distance est inférieure à 5 mètres, on considère qu’il n’y a pas eu de mouvement significatif.
+3. **Identification des périodes d’arrêt**
+   -Pour chaque point GPS, on vérifie :
+      Si l’utilisateur est resté dans un rayon de 5 mètres.
+      Si la durée d’immobilité dépasse 30 secondes.
+   -Si ces deux conditions sont remplies, le point est marqué comme un arrêt.
+4. **Classification des segments en arrêts ou déplacements**
+   -Une colonne "is_stop" est ajoutée aux données :
+       True si l’utilisateur est à l’arrêt.
+       False s’il est en mouvement.
+   -Chaque segment est ainsi étiqueté comme arrêt ou déplacement.
+   
 ### Question 6 : Segmentation Basée sur les Arrêts et Déplacements
 #### Approche
-1. **Création des Segments** :
-   - Chaque arrêt et déplacement est associé à un identifiant de segment unique.
-   - Détermination des temps de début et de fin pour chaque segment.
-2. **Propagation aux Données Climatiques et d'Activités** :
-   - Utilisation de la fonction `merge_asof` pour associer chaque segment aux données climatiques et d'activités correspondantes.
-   - Ajustement des tolérances temporelles pour maximiser les correspondances.
-
+1. **Création des segments d'arrêt et de déplacement**
+   -Utilisation des résultats de la question 5 pour séparer les données en périodes d’arrêt (is_stop=True) et périodes de déplacement (is_stop=False).
+   -Chaque segment reçoit un identifiant unique qui permet de l’identifier comme un arrêt ou un déplacement.
+2. **Détermination des temps de début et de fin pour chaque segment**
+   -Pour chaque arrêt, on stocke :
+       start_time (premier point de l’arrêt).
+       end_time (dernier point de l’arrêt).
+   -Pour chaque déplacement, on stocke les temps de début et de fin de la séquence.
+3. **Propagation aux données climatiques et d'activités**
+   -Fusion temporelle des données GPS avec les données climatiques et d’activités en utilisant merge_asof().
+   -Ajustement des tolérances temporelles pour maximiser les correspondances entre les arrêts/déplacements et les enregistrements climatiques.
+   
 ### Question 7 : Validation des Arrêts Détectés par Rapport aux Activités Auto-Reportées
 #### Approche
-1. **Fusion des Données Détectées et Déclarées** :
-   - Comparaison des arrêts détectés avec les arrêts auto-reportés en utilisant un appariement temporel précis.
-   - Utilisation de `merge_asof` avec une tolérance de 2 minutes pour lier les événements GPS aux déclarations manuelles.
-2. **Optimisation des Seuils de Détection** :
-   - Ajustement des seuils de distance et de durée d'arrêt en testant différentes configurations.
-   - Sélection des paramètres optimaux en maximisant le taux d'accord entre les arrêts détectés et déclarés.
-3. **Analyse des Discordances (Mismatches)** :
-   - Identification des écarts entre les arrêts auto-reportés et les arrêts détectés automatiquement.
-   - Vérification des erreurs potentielles de détection à l'aide de visualisations des désaccords.
-4. **Calcul du Taux d’Accord** :
-   - Création d’une colonne binaire `agreement` indiquant si un arrêt détecté correspond à un arrêt auto-reporté.
-   - Calcul du pourcentage de correspondance entre les deux sources.
-
+1. **Fusion des données détectées et auto-reportées**
+   -Comparaison des arrêts détectés (is_stop=True) avec les activités auto-reportées enregistrées séparément.
+   -Utilisation de merge_asof() pour associer chaque arrêt GPS aux activités manuellement déclarées, avec une tolérance temporelle de 2 minutes pour aligner les événements.
+2. **Lissage des trajectoires avec le filtre de Kalman**
+   -Application d'un filtrage de Kalman pour réduire le bruit GPS avant de détecter les arrêts.
+   -Le filtre de Kalman est utilisé pour :
+         Corriger les sauts anormaux des coordonnées GPS.
+         Lisser la trajectoire en prenant en compte l’historique du mouvement.
+   -Résultat attendu : une meilleure détection des arrêts et une réduction des faux positifs.
+3. **Analyse des écarts entre les arrêts détectés et les activités auto-reportées**
+   -Vérification des cas où :
+         Un arrêt a été détecté, mais aucune activité n’a été déclarée.
+          Une activité a été déclarée, mais aucun arrêt n’a été détecté.
+   -Comparaison des durées et des localisations des arrêts.
+4. **Optimisation des seuils de détection**
+   -Test de différentes valeurs de distance et de durée d'arrêt pour maximiser le taux d’accord.
+   -Comparaison des résultats avec et sans filtrage de Kalman.
+5. **Analyse des discordances (mismatches)**
+   -Identification des erreurs de détection :
+         Cas où un arrêt court est ignoré car la durée est trop faible.
+         Erreurs de localisation dues aux imprécisions GPS (réduites grâce à Kalman).
+   -Création d’une colonne agreement :
+          1 si l’arrêt détecté correspond à une activité déclarée.
+          0 sinon.
+6. **Calcul du taux d’accord entre détection et auto-report**
 ### Résultats Globaux
 - **Taux d'Accord Global** : 69.09 % des arrêts détectés coïncident avec les arrêts auto-reportés.
 - **Erreurs de Détection** :
@@ -315,55 +351,10 @@ ORDER BY shape_distance
 LIMIT 10;
 ```
 #### 📊 Analyse :
-- Plusieurs trajets **exactement identiques** ont été détectés (**Hausdorff Distance = 0**).
+
 
 ---
 # MobilityDB Analysis: Air Quality Score (AQS) and Temporal Comparisons
-
-## **9️⃣ Create & Populate Tables**
-
-### **1️⃣ Create the `trajectories` Table**
-```sql
-CREATE TABLE trajectories (
-    id SERIAL PRIMARY KEY,
-    traj_id TEXT,
-    geometry GEOMETRY(LineString, 4326),
-    start_time TIMESTAMP,
-    end_time TIMESTAMP,
-    is_stop BOOLEAN
-);
-```
-
-### **2️⃣ Create the `json_import` Table**
-```sql
-CREATE TABLE json_import (
-    id SERIAL PRIMARY KEY,
-    data JSONB
-);
-```
-
-### **3️⃣ Load the MF-JSON Data into `json_import`**
-```sql
-INSERT INTO json_import (data)
-SELECT jsonb_array_elements(pg_read_file('/tmp/trajectories_mf.json')::jsonb);
-```
-
-### **4️⃣ Insert Data into `trajectories` Table**
-```sql
-INSERT INTO trajectories (traj_id, geometry, start_time, end_time, is_stop)
-SELECT
-    data->>'id' AS traj_id,
-    ST_GeomFromGeoJSON(
-        jsonb_build_object(
-            'type', 'LineString',
-            'coordinates', data->'geometry'->'coordinates'
-        )::TEXT
-    ) AS geometry,
-    (data->'properties'->>'start_time')::TIMESTAMP AS start_time,
-    (data->'properties'->>'end_time')::TIMESTAMP AS end_time,
-    (data->'properties'->>'is_stop')::BOOLEAN AS is_stop
-FROM json_import;
-```
 
 ---
 
