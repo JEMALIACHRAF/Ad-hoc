@@ -7,7 +7,7 @@ import asyncio
 API_URL = 'http://127.0.0.1:8000/api/adhoc/'
 
 # OpenAI API Configuration
-OPENAI_API_KEY = "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"
+OPENAI_API_KEY =
 MODEL_NAME = "gpt-4o-2024-05-13"  # Replace with the correct model
 
 # Function to send the API request
