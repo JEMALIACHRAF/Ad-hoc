@@ -53,6 +53,62 @@
 
 ---
 
+# 📌 Processus Détaillé des Deux Approches avec Exemples Concrets d’Inputs/Outputs
+_(D’après les articles fournis)_
+
+---
+
+## 🔷 Article 1 : Extraction et Interrogation de Graphes de Connaissances avec OKgraph
+
+### 🔹 Diagramme de Séquence
+```mermaid
+sequenceDiagram
+    participant Utilisateur
+    participant OKgraph
+    participant NLP_Tools
+    participant WordEmbeddings
+    participant RDF_Store
+
+    Utilisateur->>+NLP_Tools: Texte brut (documents, articles, corpus)
+    NLP_Tools->>+OKgraph: Tokens et texte nettoyé (suppression stopwords, lemmatisation)
+    OKgraph->>+WordEmbeddings: Génération des vecteurs de mots (Word2Vec, FastText)
+    WordEmbeddings->>+OKgraph: Modèle d’embeddings (représentation vectorielle)
+    OKgraph->>+OKgraph: Set Expansion (génération d’entités similaires)
+    OKgraph->>+OKgraph: Set Labeling (assignation de catégories aux entités)
+    OKgraph->>+OKgraph: Relation Expansion (détection de relations entre entités)
+    OKgraph->>+OKgraph: Relation Labeling (nommage des relations)
+    OKgraph->>+RDF_Store: Construction et stockage du Graphe de Connaissance (RDF, triples SPARQL)
+    Utilisateur->>+OKgraph: Requête en langage naturel (ex: "Quelle est la capitale de l'Italie ?")
+    OKgraph->>+RDF_Store: Traduction en requête SPARQL et exécution
+    RDF_Store->>Utilisateur: Résultats formatés (ex: "Rome")
+```
+
+---
+
+## 🔷 Article 2 : Extraction Automatique d’Ontologies à partir de Documents
+
+### 🔹 Diagramme de Séquence
+```mermaid
+sequenceDiagram
+    participant Utilisateur
+    participant Preprocessing
+    participant LSA_Clustering
+    participant WordNet
+    participant OWL_Store
+
+    Utilisateur->>+Preprocessing: Texte brut/XML (corpus de documents, bases de données textuelles)
+    Preprocessing->>+Preprocessing: Tokenisation, suppression des stopwords, TF-IDF
+    Preprocessing->>+LSA_Clustering: Matrice terme-document générée
+    LSA_Clustering->>+LSA_Clustering: Application de LSA (extraction de concepts latents)
+    LSA_Clustering->>+LSA_Clustering: Clustering hiérarchique des concepts
+    LSA_Clustering->>+WordNet: Vérification et enrichissement des concepts via WordNet (synonymes, hyperonymes)
+    WordNet->>+OWL_Store: Génération et structuration de l’ontologie OWL
+    Utilisateur->>+OWL_Store: Requête SPARQL sur l’ontologie (ex: "Quels films appartiennent au genre Thriller ?")
+    OWL_Store->>Utilisateur: Résultats formatés (ex: "Inception, The Dark Knight")
+```
+
+---
+
 ## 📌 Conclusion et Recommandation
 
 Les deux articles proposent des approches efficaces mais avec des objectifs différents :
