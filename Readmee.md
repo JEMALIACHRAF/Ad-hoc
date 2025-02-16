@@ -44,14 +44,7 @@
 
 ---
 
-## 📌 Forces et Faiblesses
 
-| Critère | Article 1 (OKgraph - KGQA & BEStQ) | Article 2 (Ontology Extraction) |
-|---------|-------------------------------------|-------------------------------------|
-| **Forces** | - **Approche totalement non supervisée**.<br>- Permet d’extraire des relations implicites et de répondre en langage naturel.<br>- Intégration avec des **graphes de connaissances** existants. | - Facile à implémenter et adaptable à plusieurs **types de documents**.<br>- Résultat sous format OWL standard, exploitable dans des environnements professionnels.<br>- Exploitation de WordNet pour améliorer la qualité des relations sémantiques. |
-| **Faiblesses** | - Fonctionne uniquement sur **texte brut**, pas de support pour XML ou bases de données structurées.<br>- Nécessite un entraînement sur un **large corpus**. | - **Moins interactif**, nécessite des requêtes formelles OWL.<br>- Dépendance à **WordNet**, qui peut ne pas couvrir tous les concepts. |
-
----
 
 # 📌 Processus Détaillé des Deux Approches avec Exemples Concrets d’Inputs/Outputs
 _(D’après les articles fournis)_
@@ -156,7 +149,14 @@ sequenceDiagram
 | **6.1 Formulation des requêtes** | Ontologie OWL | `SPARQL Query Builder` | `"SELECT ?x WHERE { ?x type Film }"` | Requête SPARQL | `"SELECT ?x WHERE { ?x type Film }"` |
 
 ---
+## 📌 Forces et Faiblesses
 
+| Critère | Article 1 (OKgraph - KGQA & BEStQ) | Article 2 (Ontology Extraction) |
+|---------|-------------------------------------|-------------------------------------|
+| **Forces** | - **Approche totalement non supervisée**.<br>- Permet d’extraire des relations implicites et de répondre en langage naturel.<br>- Intégration avec des **graphes de connaissances** existants. | - Facile à implémenter et adaptable à plusieurs **types de documents**.<br>- Résultat sous format OWL standard, exploitable dans des environnements professionnels.<br>- Exploitation de WordNet pour améliorer la qualité des relations sémantiques. |
+| **Faiblesses** | - Fonctionne uniquement sur **texte brut**, pas de support pour XML ou bases de données structurées.<br>- Nécessite un entraînement sur un **large corpus**. | - **Moins interactif**, nécessite des requêtes formelles OWL.<br>- Dépendance à **WordNet**, qui peut ne pas couvrir tous les concepts. |
+
+---
 
 ## 📌 Conclusion et Recommandation
 
