@@ -85,6 +85,32 @@ sequenceDiagram
 
 ---
 
+
+### 1. Préparation des Données
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **1.1 Chargement du Corpus** | Documents texte brut | Python (Pandas, OpenText) | *"Rome est la capitale de l'Italie. Milan est une grande ville."* | Texte chargé | *"Rome est la capitale de l'Italie. Milan est une grande ville."* |
+| **1.2 Tokenisation** | Texte brut | `spaCy` / `NLTK` | *"Rome est la capitale de l'Italie."* | Liste de tokens | `["Rome", "est", "la", "capitale", "de", "Italie"]` |
+| **1.3 Nettoyage du texte** | Tokens | `re` (expressions régulières) | `["Rome", "est", "la", "capitale", "de", "Italie"]` | Texte pré-traité | `["Rome", "capitale", "Italie"]` |
+| **1.4 Normalisation** | Texte nettoyé | Lemmatization (`spaCy`) | `["Rome", "capitale", "Italie"]` | Texte standardisé | `["Rome", "capitale", "Italie"]` |
+
+### 2. Génération des Word Embeddings
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **2.1 Création de la matrice de co-occurrence** | Texte normalisé | `Word2Vec`, `FastText` | `["Rome", "capitale", "Italie"]` | Matrice de vecteurs | `{ "Rome": [0.12, 0.45, -0.32], "Italie": [0.14, 0.49, -0.36] }` |
+| **2.2 Entraînement du modèle** | Matrice de co-occurrence | `Word2Vec`, `FastText`, `GloVe` | Matrice | Modèle d’embeddings | `word_vectors.kv` |
+| **2.3 Stockage des embeddings** | Modèle d’embeddings | `pickle`, `H5Py` | `word_vectors.kv` | Fichier des vecteurs | `embeddings.pkl` |
+
+### 3. Extraction du Graphe de Connaissance avec OKgraph
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **3.1 Set Expansion** | Mots-clés | `OKgraph` | `["Rome", "Milan"]` | Liste d’entités similaires | `["Venise", "Naples", "Turin"]` |
+| **3.2 Set Labeling** | Liste d’entités | `OKgraph` | `["Rome", "Milan", "Naples"]` | Labels | `["Villes italiennes"]` |
+| **3.3 Relation Expansion** | Paires d’entités | `OKgraph` | `[ ("Rome", "Italie") ]` | Relations implicites | `[ ("Naples", "Italie"), ("Turin", "Italie") ]` |
+| **3.4 Relation Labeling** | Relations non labellisées | `OKgraph` | `[ ("Rome", "Italie") ]` | Relations labellisées | `[ ("Rome", "capitale de", "Italie") ]` |
+
+---
+
 ## 🔷 Article 2 : Extraction Automatique d’Ontologies à partir de Documents
 
 ### 🔹 Diagramme de Séquence
@@ -108,6 +134,29 @@ sequenceDiagram
 ```
 
 ---
+
+### 1. Préparation des Documents
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **1.1 Chargement des documents** | Fichiers texte / XML | `lxml`, `BeautifulSoup` | `<document>Film: Inception...</document>` | Contenu extrait | `"Film: Inception..."` |
+
+### 2. Extraction des Concepts (LSA)
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **2.1 Matrice terme-document** | Texte | `TfidfVectorizer` | `"Film", "Inception", "rêve"` | Matrice sparse | `Matrice TF-IDF` |
+
+### 3. Hiérarchisation des Concepts (Clustering Hiérarchique)
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **3.1 Construction de la taxonomie** | Concepts | `AgglomerativeClustering` | `["Film", "Thriller", "Science-fiction"]` | Taxonomie | `{Film -> (Thriller, Science-fiction)}` |
+
+### 6. Interrogation via SPARQL
+| **Sous-étape** | **Input** | **Technique / Outil** | **Exemple d’Input** | **Output** | **Exemple d’Output** |
+|---------------|----------|----------------|------------------|---------|------------------|
+| **6.1 Formulation des requêtes** | Ontologie OWL | `SPARQL Query Builder` | `"SELECT ?x WHERE { ?x type Film }"` | Requête SPARQL | `"SELECT ?x WHERE { ?x type Film }"` |
+
+---
+
 
 ## 📌 Conclusion et Recommandation
 
